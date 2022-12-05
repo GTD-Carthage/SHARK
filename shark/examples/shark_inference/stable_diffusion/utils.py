@@ -1,8 +1,8 @@
 import os
-
+import tempfile
 import torch
 from shark.shark_inference import SharkInference
-from stable_args import args
+from shark.examples.shark_inference.stable_diffusion.stable_args import args
 from shark.shark_importer import import_with_fx
 from shark.iree_utils.vulkan_utils import set_iree_vulkan_runtime_flags
 
@@ -51,9 +51,9 @@ def get_shark_model(tank_url, model_name, extra_args=[]):
 
 
 # Converts the torch-module into a shark_module.
-def compile_through_fx(model, inputs, model_name, extra_args=[]):
+def compile_through_fx(model, inputs, model_name, extra_args=[], save_dir=tempfile.gettempdir(), debug=False):
 
-    mlir_module, func_name = import_with_fx(model, inputs)
+    mlir_module, func_name,  = import_with_fx(model, inputs, debug, model_name)
 
     shark_module = SharkInference(
         mlir_module,

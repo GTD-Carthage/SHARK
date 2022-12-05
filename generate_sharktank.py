@@ -19,7 +19,7 @@ import subprocess as sp
 import hashlib
 import numpy as np
 from pathlib import Path
-
+from shark.examples.shark_inference.stable_diffusion import model_wrappers as mw
 visible_default = tf.config.list_physical_devices("GPU")
 try:
     tf.config.set_visible_devices([], "GPU")
@@ -59,6 +59,14 @@ def save_torch_model(torch_model_list):
 
             model = None
             input = None
+            if model_type == "fx_imported":
+                if torch_model_name == "clip":
+                    mw.get_clip_mlir(debug=True)
+                if torch_model_name == "unet":
+                    mw.get_unet_mlir(debug=True)
+                if torch_model_name = ="vae":
+                    mw.get_vae_mlir(debug=True)
+                continue
             if model_type == "vision":
                 model, input, _ = get_vision_model(torch_model_name)
             elif model_type == "hf":
@@ -239,11 +247,11 @@ if __name__ == "__main__":
     if args.torch_model_csv:
         save_torch_model(args.torch_model_csv)
 
-    if args.tf_model_csv:
-        save_tf_model(args.tf_model_csv)
+#    if args.tf_model_csv:
+#        save_tf_model(args.tf_model_csv)
 
-    if args.tflite_model_csv:
-        save_tflite_model(args.tflite_model_csv)
+#    if args.tflite_model_csv:
+#        save_tflite_model(args.tflite_model_csv)
 
     if args.upload:
         git_hash = sp.getoutput("git log -1 --format='%h'") + "/"
