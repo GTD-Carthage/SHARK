@@ -77,9 +77,11 @@ with gr.Blocks(title="Stable Diffusion", css=demo_css) as shark_web:
                         label="Model Variant",
                         value="stablediffusion",
                         choices=[
+                            "stablediffusion",
                             "anythingv3",
                             "analogdiffusion",
-                            "stablediffusion",
+                            "openjourney",
+                            "dreamlike",
                         ],
                     )
                     scheduler_key = gr.Dropdown(
@@ -91,7 +93,7 @@ with gr.Blocks(title="Stable Diffusion", css=demo_css) as shark_web:
                             "LMSDiscrete",
                             "DPMSolverMultistep",
                             "EulerDiscrete",
-                            "EulerAncestral",
+                            "EulerAncestralDiscrete",
                             "SharkEulerDiscrete",
                         ],
                     )

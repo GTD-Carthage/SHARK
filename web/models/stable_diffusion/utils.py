@@ -163,6 +163,9 @@ def map_device_to_name_path(device, key_combination=3):
 
 def set_init_device_flags():
     if "vulkan" in args.device:
+        # set runtime flags for vulkan.
+        set_iree_runtime_flags()
+
         # set triple flag to avoid multiple calls to get_vulkan_triple_flag
         device_name, args.device = map_device_to_name_path(args.device)
         if not args.iree_vulkan_target_triple:
@@ -172,17 +175,30 @@ def set_init_device_flags():
         print(
             f"Found device {device_name}. Using target triple {args.iree_vulkan_target_triple}."
         )
+    elif "cuda" in args.device:
+        args.device = "cuda"
+    elif "cpu" in args.device:
+        args.device = "cpu"
+
+    # set max_length based on availability.
+    if args.variant in ["anythingv3", "analogdiffusion", "dreamlike"]:
+        args.max_length = 77
+    elif args.variant == "openjourney":
+        args.max_length = 64
 
     # use tuned models only in the case of stablediffusion/fp16 and rdna3 cards.
     if (
-        args.variant != "stablediffusion"
+        args.variant in ["openjourney", "dreamlike"]
         or args.precision != "fp16"
         or "vulkan" not in args.device
         or "rdna3" not in args.iree_vulkan_target_triple
     ):
-        if args.use_tuned:
-            args.use_tuned = False
-            print("Tuned models are currently not supported for this setting.")
+        args.use_tuned = False
+        print("Tuned models are currently not supported for this setting.")
+
+    elif args.use_base_vae and args.variant != "stablediffusion":
+        args.use_tuned = False
+        print("Tuned models are currently not supported for this setting.")
 
     if args.use_tuned:
         print("Using tuned models for stablediffusion/fp16 and rdna3 card.")
@@ -204,6 +220,8 @@ def get_available_devices():
             for i, device in enumerate(device_list_dict):
                 device_list.append(f"{driver_name}://{i} => {device['name']}")
         return device_list
+
+    set_iree_runtime_flags()
 
     available_devices = []
     vulkan_devices = get_devices_by_name("vulkan")
