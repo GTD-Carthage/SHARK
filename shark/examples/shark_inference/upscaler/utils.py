@@ -1,7 +1,7 @@
 import os
 import torch
 from shark.shark_inference import SharkInference
-from models.stable_diffusion.stable_args import args
+from upscaler_args import args
 from shark.shark_importer import import_with_fx
 from shark.iree_utils.vulkan_utils import (
     set_iree_vulkan_runtime_flags,
@@ -45,7 +45,7 @@ def get_shark_model(tank_url, model_name, extra_args=[]):
     from shark.parser import shark_args
 
     # Set local shark_tank cache directory.
-    shark_args.local_tank_cache = args.local_tank_cache
+    # shark_args.local_tank_cache = args.local_tank_cache
 
     mlir_model, func_name, inputs, golden_out = download_model(
         model_name,
@@ -64,7 +64,7 @@ def compile_through_fx(model, inputs, model_name, extra_args=[]):
     mlir_module, func_name = import_with_fx(model, inputs)
 
     shark_module = SharkInference(
-        mlir_module,
+        "hello",
         device=args.device,
         mlir_dialect="linalg",
     )
