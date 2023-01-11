@@ -169,9 +169,12 @@ def download_model(
                 os.path.join(model_dir, "upstream_hash.npy"),
                 single_file=True,
             )
-            upstream_hash = str(
-                np.load(os.path.join(model_dir, "upstream_hash.npy"))
-            )
+            try:
+                upstream_hash = str(
+                    np.load(os.path.join(model_dir, "upstream_hash.npy"))
+                )
+            except FileNotFoundError:
+                upstream_hash = None
             if local_hash != upstream_hash:
                 print(
                     "Hash does not match upstream in gs://shark_tank/latest. If you want to use locally generated artifacts, this is working as intended. Otherwise, run with --update_tank."
@@ -198,7 +201,7 @@ def _internet_connected():
     import requests as req
 
     try:
-        req.get("http://1.1.1.1")
+        req.get("http://8.8.8.8")
         return True
     except:
         return False

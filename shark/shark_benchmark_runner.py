@@ -23,6 +23,8 @@ from datetime import datetime
 import time
 import csv
 import os
+import torch
+import torch._dynamo as dynamo
 
 
 class OnnxFusionOptions(object):
@@ -65,6 +67,7 @@ class SharkBenchmarkRunner(SharkRunner):
         extra_args: list = [],
     ):
         self.device = shark_args.device if device == "none" else device
+        self.enable_tf32 = shark_args.enable_tf32
         self.frontend_model = None
         self.vmfb_file = None
         self.mlir_dialect = mlir_dialect
@@ -107,6 +110,8 @@ class SharkBenchmarkRunner(SharkRunner):
 
         if self.device == "cuda":
             torch.set_default_tensor_type(torch.cuda.FloatTensor)
+            if self.enable_tf32:
+                torch.backends.cuda.matmul.allow_tf32 = True
         else:
             torch.set_default_tensor_type(torch.FloatTensor)
         torch_device = torch.device(
@@ -114,6 +119,7 @@ class SharkBenchmarkRunner(SharkRunner):
         )
         HFmodel, input = get_torch_model(modelname)[:2]
         frontend_model = HFmodel.model
+        frontend_model = dynamo.optimize("inductor")(frontend_model)
         frontend_model.to(torch_device)
         input.to(torch_device)
 
@@ -333,7 +339,10 @@ for currently supported models. Exiting benchmark ONNX."
             else:
                 bench_result["shape_type"] = "static"
             bench_result["device"] = device_str
-            bench_result["data_type"] = inputs[0].dtype
+            if "fp16" in modelname:
+                bench_result["data_type"] = "float16"
+            else:
+                bench_result["data_type"] = inputs[0].dtype
             for e in engines:
                 (
                     bench_result["param_count"],
