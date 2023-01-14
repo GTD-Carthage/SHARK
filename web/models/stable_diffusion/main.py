@@ -5,6 +5,7 @@ import torchvision.transforms as T
 from tqdm.auto import tqdm
 from models.stable_diffusion.cache_objects import model_cache
 from models.stable_diffusion.stable_args import args
+from models.stable_diffusion.utils import disk_space_check
 from random import randint
 import numpy as np
 import time
@@ -72,9 +73,10 @@ def set_ui_params(
 # save output images and the inputs correspoding to it.
 def save_output_img(output_img):
     output_path = args.output_dir if args.output_dir else Path.cwd()
+    disk_space_check(output_path, lim=5)
     generated_imgs_path = Path(output_path, "generated_imgs")
     generated_imgs_path.mkdir(parents=True, exist_ok=True)
-    csv_path = Path(output_path, "imgs_details.csv")
+    csv_path = Path(generated_imgs_path, "imgs_history.csv")
 
     prompt_slice = re.sub("[^a-zA-Z0-9]", "_", args.prompts[0][:15])
     out_img_name = (
@@ -90,7 +92,7 @@ def save_output_img(output_img):
         "PROMPT": args.prompts[0],
         "NEG_PROMPT": args.negative_prompts[0],
         "SEED": args.seed,
-        "CFG_SCALE": args.guidance_scale,
+        "CFG_SCALE": float(args.guidance_scale),
         "PRECISION": args.precision,
         "STEPS": args.steps,
         "OUTPUT": out_img_path,
@@ -140,6 +142,7 @@ def stable_diff_inf(
         width = 768
 
     # get all cached data.
+    disk_space_check(Path.cwd())
     model_cache.set_models(device_key)
     tokenizer = model_cache.tokenizer
     scheduler = model_cache.schedulers[args.scheduler]
