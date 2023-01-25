@@ -1,7 +1,6 @@
 import torch
 import os
 from PIL import Image
-import torchvision.transforms as T
 from tqdm.auto import tqdm
 from models.stable_diffusion.cache_objects import model_cache
 from models.stable_diffusion.stable_args import args
@@ -82,8 +81,23 @@ def save_output_img(output_img):
     out_img_name = (
         f"{prompt_slice}_{args.seed}_{dt.now().strftime('%y%m%d_%H%M%S')}"
     )
-    out_img_path = Path(generated_imgs_path, f"{out_img_name}.jpg")
-    output_img.save(out_img_path, quality=95, subsampling=0)
+    if args.output_img_format == "jpg":
+        out_img_path = Path(generated_imgs_path, f"{out_img_name}.jpg")
+        output_img.save(
+            out_img_path,
+            quality=95,
+            subsampling=0,
+            optimize=True,
+            progressive=True,
+        )
+    else:
+        out_img_path = Path(generated_imgs_path, f"{out_img_name}.png")
+        output_img.save(out_img_path, "PNG")
+        if args.output_img_format not in ["png", "jpg"]:
+            print(
+                f"[ERROR] Format {args.output_img_format} is not supported yet."
+                "saving image as png. Supported formats png / jpg"
+            )
 
     new_entry = {
         "VARIANT": args.variant,
@@ -253,10 +267,8 @@ def stable_diff_inf(
     print(f"\nTotal image generation time: {total_time}sec")
 
     # generate outputs to web.
-    transform = T.ToPILImage()
-    pil_images = [
-        transform(image) for image in torch.from_numpy(images).to(torch.uint8)
-    ]
+    images = torch.from_numpy(images).to(torch.uint8).permute(0, 2, 3, 1)
+    pil_images = [Image.fromarray(image) for image in images.numpy()]
 
     text_output = f"prompt={args.prompts}"
     text_output += f"\nnegative prompt={args.negative_prompts}"

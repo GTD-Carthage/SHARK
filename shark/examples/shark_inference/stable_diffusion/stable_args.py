@@ -15,9 +15,10 @@ p = argparse.ArgumentParser(
 ##############################################################################
 
 p.add_argument(
+    "-p",
     "--prompts",
-    nargs="+",
-    default=["cyberpunk forest by Salvador Dali"],
+    action="append",
+    default=[],
     help="text of which images to be generated.",
 )
 
@@ -43,6 +44,20 @@ p.add_argument(
 )
 
 p.add_argument(
+    "--height",
+    type=int,
+    default=512,
+    help="the height of the output image.",
+)
+
+p.add_argument(
+    "--width",
+    type=int,
+    default=512,
+    help="the width of the output image.",
+)
+
+p.add_argument(
     "--guidance_scale",
     type=float,
     default=7.5,
@@ -65,19 +80,12 @@ p.add_argument(
 )
 
 p.add_argument(
-    "--version",
-    type=str,
-    default="v2_1base",
-    help="Specify version of stable diffusion model",
-)
-
-p.add_argument(
     "--precision", type=str, default="fp16", help="precision to run the model."
 )
 
 p.add_argument(
     "--import_mlir",
-    default=False,
+    default=True,
     action=argparse.BooleanOptionalAction,
     help="imports the model from torch module to shark_module otherwise downloads the model from shark_tank.",
 )
@@ -111,16 +119,17 @@ p.add_argument(
 )
 
 p.add_argument(
-    "--variant",
-    default="stablediffusion",
-    help="We now support multiple vairants of SD finetuned for different dataset. you can use the following anythingv3, ...",  # TODO add more once supported
-)
-
-p.add_argument(
     "--scheduler",
     type=str,
     default="SharkEulerDiscrete",
     help="other supported schedulers are [PNDM, DDIM, LMSDiscrete, EulerDiscrete, DPMSolverMultistep]",
+)
+
+p.add_argument(
+    "--output_img_format",
+    type=str,
+    default="png",
+    help="specify the format in which output image is save. Supported options: jpg / png",
 )
 
 p.add_argument(
@@ -136,6 +145,28 @@ p.add_argument(
     default=1,
     help="number of images to be generated with random seeds in single execution",
 )
+
+p.add_argument(
+    "--ckpt_loc",
+    type=str,
+    default="",
+    help="Path to SD's .ckpt file.",
+)
+
+p.add_argument(
+    "--hf_model_id",
+    type=str,
+    default="stabilityai/stable-diffusion-2-1-base",
+    help="The repo-id of hugging face.",
+)
+
+p.add_argument(
+    "--enable_stack_trace",
+    default=False,
+    action=argparse.BooleanOptionalAction,
+    help="Enable showing the stack trace when retrying the base model configuration",
+)
+
 ##############################################################################
 ### IREE - Vulkan supported flags
 ##############################################################################

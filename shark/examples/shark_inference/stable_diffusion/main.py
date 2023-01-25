@@ -5,7 +5,6 @@ os.environ["AMD_ENABLE_LLPC"] = "1"
 from transformers import CLIPTextModel, CLIPTokenizer
 import torch
 from PIL import Image
-import torchvision.transforms as T
 from diffusers import (
     LMSDiscreteScheduler,
     PNDMScheduler,
@@ -21,6 +20,7 @@ from datetime import datetime as dt
 import json
 import re
 from pathlib import Path
+from model_wrappers import SharkifyStableDiffusionModel
 
 # This has to come before importing cache objects
 if args.clear_all:
@@ -42,9 +42,8 @@ if args.clear_all:
         shutil.rmtree(os.path.join(home, ".local/shark_tank"))
 
 
-from utils import set_init_device_flags, disk_space_check
+from utils import set_init_device_flags, disk_space_check, preprocessCKPT
 
-from opt_params import get_unet, get_vae, get_clip
 from schedulers import (
     SharkEulerDiscreteScheduler,
 )
@@ -73,31 +72,49 @@ if __name__ == "__main__":
 
     dtype = torch.float32 if args.precision == "fp32" else torch.half
 
+    # Make it as default prompt
+    if len(args.prompts) == 0:
+        args.prompts = ["cyberpunk forest by Salvador Dali"]
+
     prompt = args.prompts
     neg_prompt = args.negative_prompts
-    height = 512  # default height of Stable Diffusion
-    width = 512  # default width of Stable Diffusion
-    if args.version == "v2_1":
-        height = 768
-        width = 768
-
+    height = args.height
+    width = args.width
     num_inference_steps = args.steps  # Number of denoising steps
 
     # Scale for classifier-free guidance
     guidance_scale = torch.tensor(args.guidance_scale).to(torch.float32)
 
-    # TODO: Add support for batch_size > 1.
     batch_size = len(prompt)
-    if batch_size != 1:
-        sys.exit("More than one prompt is not supported yet.")
-    if batch_size != len(neg_prompt):
-        sys.exit("prompts and negative prompts must be of same length")
+
+    # Try to make neg_prompt equal to batch_size by appending blank strings.
+    for i in range(batch_size - len(neg_prompt)):
+        neg_prompt.append("")
 
     set_init_device_flags()
     disk_space_check(Path.cwd())
-    clip = get_clip()
-    unet = get_unet()
-    vae = get_vae()
+
+    if not args.import_mlir:
+        from opt_params import get_unet, get_vae, get_clip
+
+        clip = get_clip()
+        unet = get_unet()
+        vae = get_vae()
+    else:
+        if ".ckpt" in args.ckpt_loc:
+            preprocessCKPT()
+        mlir_import = SharkifyStableDiffusionModel(
+            args.hf_model_id,
+            args.ckpt_loc,
+            args.precision,
+            max_len=args.max_length,
+            batch_size=batch_size,
+            height=height,
+            width=width,
+            use_base_vae=args.use_base_vae,
+        )
+        clip, unet, vae = mlir_import()
+
     if args.dump_isa:
         dump_isas(args.dispatch_benchmarks_dir)
 
@@ -107,7 +124,7 @@ if __name__ == "__main__":
         subfolder="scheduler",
     )
     cpu_scheduling = True
-    if args.version == "v2_1":
+    if args.hf_model_id == "stabilityai/stable-diffusion-2-1":
         tokenizer = CLIPTokenizer.from_pretrained(
             "stabilityai/stable-diffusion-2-1", subfolder="tokenizer"
         )
@@ -117,7 +134,7 @@ if __name__ == "__main__":
             subfolder="scheduler",
         )
 
-    if args.version == "v2_1base" and args.variant == "stablediffusion":
+    if args.hf_model_id == "stabilityai/stable-diffusion-2-1-base":
         tokenizer = CLIPTokenizer.from_pretrained(
             "stabilityai/stable-diffusion-2-1-base", subfolder="tokenizer"
         )
@@ -258,11 +275,8 @@ if __name__ == "__main__":
         print(f"VAE Inference time (ms): {vae_inf_time:.3f}")
         print(f"\nTotal image generation time: {total_time}sec")
 
-        transform = T.ToPILImage()
-        pil_images = [
-            transform(image)
-            for image in torch.from_numpy(images).to(torch.uint8)
-        ]
+        images = torch.from_numpy(images).to(torch.uint8).permute(0, 2, 3, 1)
+        pil_images = [Image.fromarray(image) for image in images.numpy()]
 
         if args.output_dir is not None:
             output_path = Path(args.output_dir)
@@ -275,7 +289,7 @@ if __name__ == "__main__":
                 "prompt": args.prompts[i],
                 "negative prompt": args.negative_prompts[i],
                 "seed": args.seed,
-                "variant": args.variant,
+                "hf_model_id": args.hf_model_id,
                 "precision": args.precision,
                 "steps": args.steps,
                 "guidance_scale": args.guidance_scale,
@@ -283,8 +297,20 @@ if __name__ == "__main__":
             }
             prompt_slice = re.sub("[^a-zA-Z0-9]", "_", args.prompts[i][:15])
             img_name = f"{prompt_slice}_{args.seed}_{run}_{dt.now().strftime('%y%m%d_%H%M%S')}"
-            pil_images[i].save(
-                output_path / f"{img_name}.jpg", quality=95, subsampling=0
-            )
+            if args.output_img_format == "jpg":
+                pil_images[i].save(
+                    output_path / f"{img_name}.jpg",
+                    quality=95,
+                    subsampling=0,
+                    optimize=True,
+                    progressive=True,
+                )
+            else:
+                pil_images[i].save(output_path / f"{img_name}.png", "PNG")
+                if args.output_img_format not in ["png", "jpg"]:
+                    print(
+                        f"[ERROR] Format {args.output_img_format} is not supported yet."
+                        "saving image as png. Supported formats png / jpg"
+                    )
             with open(output_path / f"{img_name}.json", "w") as f:
                 f.write(json.dumps(json_store, indent=4))
