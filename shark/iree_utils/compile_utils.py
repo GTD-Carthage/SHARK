@@ -80,7 +80,17 @@ def get_iree_common_args():
 def get_model_specific_args():
     ms_args = []
     if shark_args.enable_conv_transform == True:
-        ms_args += ["--iree-flow-enable-conv-nchw-to-nhwc-transform"]
+        ms_args += [
+            "--iree-preprocessing-pass-pipeline=builtin.module(func.func(iree-flow-convert-conv-nchw-to-nhwc))"
+        ]
+    if shark_args.enable_img2col_transform == True:
+        ms_args += [
+            "--iree-preprocessing-pass-pipeline=builtin.module(func.func(iree-preprocessing-convert-conv2d-to-img2col))"
+        ]
+    if shark_args.use_winograd == True:
+        ms_args += [
+            "--iree-preprocessing-pass-pipeline=builtin.module(func.func(iree-linalg-ext-convert-conv2d-to-winograd))"
+        ]
     return ms_args
 
 
@@ -143,7 +153,6 @@ def compile_benchmark_dirs(bench_dir, device, dispatch_benchmarks):
                     in_dispatches = True
             if all_dispatches or in_dispatches:
                 for f_ in os.listdir(f"{bench_dir}/{d_}"):
-
                     if "benchmark.mlir" in f_:
                         dispatch_file = open(f"{bench_dir}/{d_}/{f_}", "r")
                         module = dispatch_file.read()
@@ -276,9 +285,19 @@ def compile_module_to_flatbuffer(
     return flatbuffer_blob
 
 
-def get_iree_module(flatbuffer_blob, device):
+def get_iree_module(flatbuffer_blob, device, device_idx=None):
     # Returns the compiled module and the configs.
-    config = get_iree_runtime_config(device)
+    if device_idx is not None:
+        device = iree_device_map(device)
+        print("registering device id: ", device_idx)
+        haldriver = ireert.get_driver(device)
+
+        haldevice = haldriver.create_device(
+            haldriver.query_available_devices()[device_idx]["device_id"]
+        )
+        config = ireert.Config(device=haldevice)
+    else:
+        config = get_iree_runtime_config(device)
     vm_module = ireert.VmModule.from_flatbuffer(
         config.vm_instance, flatbuffer_blob
     )
@@ -294,20 +313,20 @@ def get_iree_compiled_module(
     frontend: str = "torch",
     model_config_path: str = None,
     extra_args: list = [],
+    device_idx: int = None,
 ):
     """Given a module returns the compiled .vmfb and configs"""
     flatbuffer_blob = compile_module_to_flatbuffer(
         module, device, frontend, model_config_path, extra_args
     )
-    return get_iree_module(flatbuffer_blob, device)
+    return get_iree_module(flatbuffer_blob, device, device_idx=device_idx)
 
 
-def load_flatbuffer(flatbuffer_path: str, device: str):
-
+def load_flatbuffer(flatbuffer_path: str, device: str, device_idx: int = None):
     with open(os.path.join(flatbuffer_path), "rb") as f:
         flatbuffer_blob = f.read()
 
-    return get_iree_module(flatbuffer_blob, device)
+    return get_iree_module(flatbuffer_blob, device, device_idx=device_idx)
 
 
 def export_iree_module_to_vmfb(
